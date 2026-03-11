@@ -53,9 +53,9 @@ export default function Home() {
             </div>
             <p className="text-sm">
               Text{' '}
-              <span className="font-mono font-medium text-primary">
-                {process.env.NEXT_PUBLIC_TWILIO_PHONE || 'your gym number'}
-              </span>
+              <a href="sms:+18084272439" className="font-mono font-medium text-primary hover:underline">
+                (808) 427-2439
+              </a>
               {' '}to book
             </p>
             <p className="text-xs text-muted-foreground mt-2">

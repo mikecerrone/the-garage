@@ -189,7 +189,7 @@ export default function BookingPage() {
               <div className="mt-6 pt-6 border-t border-border text-center">
                 <p className="text-sm text-muted-foreground mb-2">Prefer to text?</p>
                 <p className="text-sm font-medium">
-                  Text <span className="text-primary">{process.env.NEXT_PUBLIC_TWILIO_PHONE || 'Bob'}</span> to book via SMS
+                  Text <a href="sms:+18084272439" className="text-primary hover:underline">(808) 427-2439</a> to book via SMS
                 </p>
               </div>
             </CardContent>
