@@ -11,7 +11,7 @@ export function Spinner({ className, size = 'md' }: SpinnerProps) {
   return (
     <svg
       className={cn(
-        'animate-spin text-primary',
+        'animate-spin text-current',
         {
           'h-4 w-4': size === 'sm',
           'h-6 w-6': size === 'md',
