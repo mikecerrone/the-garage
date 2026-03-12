@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { format, parseISO } from 'date-fns';
+import { addHours, format, parseISO } from 'date-fns';
 import {
   Calendar,
   Clock,
@@ -72,15 +72,32 @@ export default function AdminDashboard() {
 
       if (error) throw error;
 
-      // If marking as attended, create a payment record
+      const { data: existingPayments, error: paymentsError } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('session_id', session.id);
+
+      if (paymentsError) throw paymentsError;
+
       if (newAttended) {
-        const sessionRate = parseInt(process.env.NEXT_PUBLIC_SESSION_RATE || '25');
-        await supabase.from('payments').insert({
-          member_id: session.member_id,
-          session_id: session.id,
-          amount: sessionRate,
-          is_paid: false,
-        });
+        if (!existingPayments || existingPayments.length === 0) {
+          const sessionRate = parseInt(process.env.NEXT_PUBLIC_SESSION_RATE || '25');
+          const { error: insertError } = await supabase.from('payments').insert({
+            member_id: session.member_id,
+            session_id: session.id,
+            amount: sessionRate,
+            is_paid: false,
+          });
+
+          if (insertError) throw insertError;
+        }
+      } else if (existingPayments && existingPayments.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('payments')
+          .delete()
+          .eq('session_id', session.id);
+
+        if (deleteError) throw deleteError;
       }
 
       fetchSessions();
@@ -373,7 +390,8 @@ function AddSessionModal({ isOpen, onClose, date, onSuccess }: AddSessionModalPr
 
     setLoading(true);
     try {
-      const endTime = `${parseInt(startTime.split(':')[0]) + 1}:00:00`;
+      const startDateTime = parseISO(`2000-01-01T${startTime}:00`);
+      const endTime = format(addHours(startDateTime, 1), 'HH:mm:ss');
 
       const { error } = await supabase.from('sessions').insert({
         member_id: selectedMember,
