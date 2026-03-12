@@ -47,6 +47,7 @@ CREATE TABLE sessions (
   attended BOOLEAN DEFAULT FALSE,
   created_via created_via NOT NULL,
   notes TEXT,
+  operator_request_key TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -97,6 +98,10 @@ CREATE TABLE announcements (
 CREATE INDEX idx_sessions_date ON sessions(date);
 CREATE INDEX idx_sessions_member_id ON sessions(member_id);
 CREATE INDEX idx_sessions_status ON sessions(status);
+CREATE UNIQUE INDEX idx_sessions_operator_request_key ON sessions(operator_request_key)
+  WHERE operator_request_key IS NOT NULL;
+CREATE UNIQUE INDEX idx_sessions_member_slot_active ON sessions(member_id, date, start_time)
+  WHERE status <> 'cancelled';
 CREATE INDEX idx_availability_day ON availability(day_of_week);
 CREATE INDEX idx_availability_date ON availability(specific_date);
 CREATE INDEX idx_members_phone ON members(phone);

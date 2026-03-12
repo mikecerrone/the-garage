@@ -36,6 +36,7 @@ export interface Session {
   created_via: CreatedVia;
   notes: string | null;
   created_at: string;
+  operator_request_key?: string | null;
   // Joined fields
   member?: Member;
 }
