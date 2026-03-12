@@ -74,7 +74,7 @@ export default function AdminDashboard() {
 
       // If marking as attended, create a payment record
       if (newAttended) {
-        const sessionRate = parseInt(process.env.NEXT_PUBLIC_SESSION_RATE || '50');
+        const sessionRate = parseInt(process.env.NEXT_PUBLIC_SESSION_RATE || '25');
         await supabase.from('payments').insert({
           member_id: session.member_id,
           session_id: session.id,
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold">
-              ${sessions.filter((s) => s.attended).length * 50}
+              ${sessions.filter((s) => s.attended).length * 25}
             </div>
             <div className="text-sm text-muted-foreground">Earned Today</div>
           </CardContent>
