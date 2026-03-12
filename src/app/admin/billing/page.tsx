@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
 import {
   DollarSign,
   Download,
@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Check,
   Clock,
+  MessageSquare,
+  CheckCircle2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Payment, Session, Member } from '@/types/database';
@@ -20,13 +22,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 
+const SESSION_RATE = 25;
+
 interface MemberBilling {
   member: Member;
   sessions: number;
   total: number;
   paid: number;
   unpaid: number;
-  payments: Payment[];
+  payments: (Payment & { session?: { date: string; start_time: string } })[];
 }
 
 export default function BillingPage() {
@@ -34,6 +38,9 @@ export default function BillingPage() {
   const [billingData, setBillingData] = useState<MemberBilling[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingPayment, setUpdatingPayment] = useState<string | null>(null);
+  const [markingAllPaid, setMarkingAllPaid] = useState<string | null>(null);
+  const [sendingReminders, setSendingReminders] = useState(false);
+  const [reminderResult, setReminderResult] = useState<{ sent: number; failed: number } | null>(null);
 
   const supabase = createClient();
 
@@ -93,7 +100,7 @@ export default function BillingPage() {
         }
 
         memberMap[session.member_id].sessions += 1;
-        memberMap[session.member_id].total += 50; // Default rate
+        memberMap[session.member_id].total += SESSION_RATE;
       });
 
       // Add payment data
@@ -108,8 +115,12 @@ export default function BillingPage() {
         }
       });
 
-      // Sort by total descending
-      const sorted = Object.values(memberMap).sort((a, b) => b.total - a.total);
+      // Sort: unpaid first, then by total descending
+      const sorted = Object.values(memberMap).sort((a, b) => {
+        if (a.unpaid > 0 && b.unpaid === 0) return -1;
+        if (a.unpaid === 0 && b.unpaid > 0) return 1;
+        return b.total - a.total;
+      });
       setBillingData(sorted);
     } catch (error) {
       console.error('Error fetching billing data:', error);
@@ -138,6 +149,54 @@ export default function BillingPage() {
     }
   }
 
+  async function markAllPaidForMember(memberId: string) {
+    setMarkingAllPaid(memberId);
+    try {
+      const { error } = await supabase
+        .from('payments')
+        .update({
+          is_paid: true,
+          paid_at: new Date().toISOString(),
+        })
+        .eq('member_id', memberId)
+        .eq('is_paid', false)
+        .gte('created_at', monthStart.toISOString())
+        .lte('created_at', monthEnd.toISOString());
+
+      if (error) throw error;
+      fetchBillingData();
+    } catch (error) {
+      console.error('Error marking all paid:', error);
+    } finally {
+      setMarkingAllPaid(null);
+    }
+  }
+
+  async function sendBillingReminders() {
+    setSendingReminders(true);
+    setReminderResult(null);
+    try {
+      const monthLabel = format(currentMonth, 'MMMM');
+      const response = await fetch('/api/billing/reminders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: format(currentMonth, 'yyyy-MM'),
+          monthLabel,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setReminderResult({ sent: result.sent, failed: result.failed });
+      setTimeout(() => setReminderResult(null), 5000);
+    } catch (error) {
+      console.error('Error sending reminders:', error);
+    } finally {
+      setSendingReminders(false);
+    }
+  }
+
   function exportCSV() {
     const headers = ['Member', 'Phone', 'Sessions', 'Total', 'Paid', 'Unpaid'];
     const rows = billingData.map((b) => [
@@ -146,7 +205,7 @@ export default function BillingPage() {
       b.sessions.toString(),
       `$${b.total}`,
       `$${b.paid}`,
-      `$${b.unpaid}`,
+      `$${b.total - b.paid}`,
     ]);
 
     const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
@@ -162,8 +221,9 @@ export default function BillingPage() {
 
   const totalRevenue = billingData.reduce((sum, b) => sum + b.total, 0);
   const totalPaid = billingData.reduce((sum, b) => sum + b.paid, 0);
-  const totalUnpaid = billingData.reduce((sum, b) => sum + b.unpaid, 0);
+  const totalUnpaid = totalRevenue - totalPaid;
   const totalSessions = billingData.reduce((sum, b) => sum + b.sessions, 0);
+  const membersWithBalance = billingData.filter(b => b.total - b.paid > 0).length;
 
   return (
     <div className="space-y-6">
@@ -171,9 +231,11 @@ export default function BillingPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Cash Tab</h1>
-          <p className="text-muted-foreground">Billing and payment tracking</p>
+          <p className="text-muted-foreground">
+            ${SESSION_RATE}/session &middot; Billing and payment tracking
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="icon"
@@ -193,8 +255,29 @@ export default function BillingPage() {
           </Button>
           <Button variant="outline" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-2" />
-            Export CSV
+            Export
           </Button>
+          {membersWithBalance > 0 && (
+            <Button
+              variant="outline"
+              onClick={sendBillingReminders}
+              disabled={sendingReminders}
+            >
+              {sendingReminders ? (
+                <Spinner size="sm" />
+              ) : reminderResult ? (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Sent to {reminderResult.sent}
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Text Reminders
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -204,7 +287,7 @@ export default function BillingPage() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Total Revenue</span>
+              <span className="text-sm text-muted-foreground">Total</span>
             </div>
             <div className="text-2xl font-bold mt-1">${totalRevenue}</div>
           </CardContent>
@@ -222,7 +305,7 @@ export default function BillingPage() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-orange-500" />
-              <span className="text-sm text-muted-foreground">Unpaid</span>
+              <span className="text-sm text-muted-foreground">Outstanding</span>
             </div>
             <div className="text-2xl font-bold mt-1 text-orange-500">${totalUnpaid}</div>
           </CardContent>
@@ -249,85 +332,122 @@ export default function BillingPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {billingData.map((billing) => (
-            <Card key={billing.member.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-primary font-semibold">
-                        {billing.member.name.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">{billing.member.name}</CardTitle>
-                      <CardDescription>{formatPhone(billing.member.phone)}</CardDescription>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold">${billing.total}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {billing.sessions} session{billing.sessions !== 1 ? 's' : ''}
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1">
-                    <Check className="h-4 w-4 text-green-600" />
-                    <span className="text-green-600">${billing.paid} paid</span>
-                  </div>
-                  {billing.unpaid > 0 && (
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4 text-orange-500" />
-                      <span className="text-orange-500">${billing.unpaid} unpaid</span>
-                    </div>
-                  )}
-                </div>
+          {billingData.map((billing) => {
+            const balance = billing.total - billing.paid;
+            const isPaidUp = balance <= 0;
 
-                {/* Individual payments */}
-                {billing.payments.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    {billing.payments.map((payment) => (
-                      <div
-                        key={payment.id}
-                        className="flex items-center justify-between py-1 border-t border-border"
-                      >
-                        <div className="text-sm">
-                          {payment.session
-                            ? formatDate(payment.session.date)
-                            : 'Session'}
-                          <span className="text-muted-foreground ml-2">
-                            ${Number(payment.amount)}
+            return (
+              <Card key={billing.member.id} className={isPaidUp ? 'opacity-70' : ''}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                        isPaidUp ? 'bg-green-100' : 'bg-primary/10'
+                      }`}>
+                        {isPaidUp ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <span className="text-primary font-semibold">
+                            {billing.member.name.charAt(0).toUpperCase()}
                           </span>
+                        )}
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">{billing.member.name}</CardTitle>
+                        <CardDescription>{formatPhone(billing.member.phone)}</CardDescription>
+                      </div>
+                    </div>
+                    <div className="text-right flex items-center gap-3">
+                      <div>
+                        <div className="text-lg font-bold">${billing.total}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {billing.sessions} session{billing.sessions !== 1 ? 's' : ''}
                         </div>
+                      </div>
+                      {!isPaidUp && (
                         <Button
-                          variant={payment.is_paid ? 'outline' : 'default'}
+                          onClick={() => markAllPaidForMember(billing.member.id)}
+                          disabled={markingAllPaid === billing.member.id}
                           size="sm"
-                          disabled={updatingPayment === payment.id}
-                          onClick={() =>
-                            togglePaymentStatus(payment.id, payment.is_paid)
-                          }
                         >
-                          {updatingPayment === payment.id ? (
+                          {markingAllPaid === billing.member.id ? (
                             <Spinner size="sm" />
-                          ) : payment.is_paid ? (
-                            <>
-                              <Check className="h-3 w-3 mr-1" />
-                              Paid
-                            </>
                           ) : (
-                            'Mark Paid'
+                            <>
+                              <Check className="h-4 w-4 mr-1" />
+                              Paid ${balance}
+                            </>
                           )}
                         </Button>
-                      </div>
-                    ))}
+                      )}
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-4 text-sm mb-3">
+                    <div className="flex items-center gap-1">
+                      <Check className="h-4 w-4 text-green-600" />
+                      <span className="text-green-600">${billing.paid} paid</span>
+                    </div>
+                    {!isPaidUp && (
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4 text-orange-500" />
+                        <span className="text-orange-500">${balance} unpaid</span>
+                      </div>
+                    )}
+                    {isPaidUp && (
+                      <Badge variant="outline" className="text-green-600 border-green-200">
+                        Paid in full
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Individual payments */}
+                  {billing.payments.length > 0 && (
+                    <div className="space-y-1">
+                      {billing.payments.map((payment) => (
+                        <div
+                          key={payment.id}
+                          className="flex items-center justify-between py-1.5 border-t border-border"
+                        >
+                          <div className="text-sm flex items-center gap-2">
+                            <span>
+                              {payment.session
+                                ? formatDate(payment.session.date)
+                                : 'Session'}
+                            </span>
+                            <span className="text-muted-foreground">
+                              ${Number(payment.amount)}
+                            </span>
+                          </div>
+                          <Button
+                            variant={payment.is_paid ? 'outline' : 'default'}
+                            size="sm"
+                            className="h-7 text-xs"
+                            disabled={updatingPayment === payment.id}
+                            onClick={() =>
+                              togglePaymentStatus(payment.id, payment.is_paid)
+                            }
+                          >
+                            {updatingPayment === payment.id ? (
+                              <Spinner size="sm" />
+                            ) : payment.is_paid ? (
+                              <>
+                                <Check className="h-3 w-3 mr-1" />
+                                Paid
+                              </>
+                            ) : (
+                              'Mark Paid'
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

@@ -30,7 +30,7 @@ CREATE TABLE availability (
   is_recurring BOOLEAN DEFAULT TRUE,
   specific_date DATE, -- For one-off overrides
   is_blocked BOOLEAN DEFAULT FALSE, -- For blocking specific slots
-  max_capacity INTEGER DEFAULT 1, -- Flexible capacity per slot
+  max_capacity INTEGER DEFAULT 999, -- 999 = no limit
   created_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT valid_time_range CHECK (start_time < end_time)
 );
@@ -144,17 +144,17 @@ CREATE POLICY "Allow all for authenticated" ON announcements
 -- Plus Saturday mornings
 
 INSERT INTO availability (day_of_week, start_time, end_time, max_capacity) VALUES
-  (1, '06:00', '12:00', 1), -- Monday morning
-  (1, '16:00', '20:00', 1), -- Monday evening
-  (2, '06:00', '12:00', 1), -- Tuesday morning
-  (2, '16:00', '20:00', 1), -- Tuesday evening
-  (3, '06:00', '12:00', 1), -- Wednesday morning
-  (3, '16:00', '20:00', 1), -- Wednesday evening
-  (4, '06:00', '12:00', 1), -- Thursday morning
-  (4, '16:00', '20:00', 1), -- Thursday evening
-  (5, '06:00', '12:00', 1), -- Friday morning
-  (5, '16:00', '20:00', 1), -- Friday evening
-  (6, '08:00', '12:00', 1); -- Saturday morning
+  (1, '07:00', '09:00', 999), -- Monday morning
+  (1, '18:00', '20:00', 999), -- Monday evening
+  (2, '07:00', '09:00', 999), -- Tuesday morning
+  (2, '18:00', '20:00', 999), -- Tuesday evening
+  (3, '07:00', '09:00', 999), -- Wednesday morning
+  (3, '18:00', '20:00', 999), -- Wednesday evening
+  (4, '07:00', '09:00', 999), -- Thursday morning
+  (4, '18:00', '20:00', 999), -- Thursday evening
+  (5, '07:00', '09:00', 999), -- Friday morning
+  (5, '18:00', '20:00', 999), -- Friday evening
+  (6, '07:00', '09:00', 999); -- Saturday morning
 
 -- Function to get available slots for a given date
 CREATE OR REPLACE FUNCTION get_available_slots(target_date DATE)
