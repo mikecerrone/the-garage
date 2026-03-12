@@ -139,15 +139,15 @@ export default function AvailabilityManager() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Select
-                              className="h-8 w-16 text-xs"
+                              className="h-8 w-20 text-xs"
                               value={slot.max_capacity.toString()}
                               onChange={(e) =>
                                 updateCapacity(slot.id, parseInt(e.target.value))
                               }
                             >
-                              {[1, 2, 3, 4, 5].map((n) => (
-                                <option key={n} value={n}>
-                                  {n}
+                              {CAPACITY_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
                                 </option>
                               ))}
                             </Select>
@@ -227,27 +227,68 @@ interface AddAvailabilityModalProps {
   onSuccess: () => void;
 }
 
+type SlotPreset = 'morning' | 'evening' | 'custom';
+
+const NO_LIMIT = 999;
+
+const CAPACITY_OPTIONS = [
+  { value: NO_LIMIT, label: 'No limit' },
+  { value: 8, label: '8 people' },
+  { value: 9, label: '9 people' },
+  { value: 10, label: '10 people' },
+  { value: 11, label: '11 people' },
+  { value: 12, label: '12 people' },
+  { value: 13, label: '13 people' },
+  { value: 14, label: '14 people' },
+  { value: 15, label: '15 people' },
+];
+
 function AddAvailabilityModal({ isOpen, onClose, onSuccess }: AddAvailabilityModalProps) {
   const [dayOfWeek, setDayOfWeek] = useState(1);
-  const [startTime, setStartTime] = useState('06:00');
-  const [endTime, setEndTime] = useState('12:00');
-  const [maxCapacity, setMaxCapacity] = useState(1);
+  const [slotPreset, setSlotPreset] = useState<SlotPreset>('morning');
+  const [customSlots, setCustomSlots] = useState([{ startTime: '08:00', endTime: '10:00' }]);
+  const [maxCapacity, setMaxCapacity] = useState(NO_LIMIT);
   const [loading, setLoading] = useState(false);
 
   const supabase = createClient();
+
+  function getTimesForPreset(preset: SlotPreset) {
+    switch (preset) {
+      case 'morning': return [{ startTime: '07:00', endTime: '09:00' }];
+      case 'evening': return [{ startTime: '18:00', endTime: '20:00' }];
+      case 'custom': return customSlots;
+    }
+  }
+
+  function addCustomSlot() {
+    setCustomSlots([...customSlots, { startTime: '08:00', endTime: '10:00' }]);
+  }
+
+  function removeCustomSlot(index: number) {
+    setCustomSlots(customSlots.filter((_, i) => i !== index));
+  }
+
+  function updateCustomSlot(index: number, field: 'startTime' | 'endTime', value: string) {
+    const updated = [...customSlots];
+    updated[index] = { ...updated[index], [field]: value };
+    setCustomSlots(updated);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const { error } = await supabase.from('availability').insert({
+      const slots = getTimesForPreset(slotPreset);
+      const inserts = slots.map(slot => ({
         day_of_week: dayOfWeek,
-        start_time: startTime + ':00',
-        end_time: endTime + ':00',
+        start_time: slot.startTime + ':00',
+        end_time: slot.endTime + ':00',
         is_recurring: true,
         max_capacity: maxCapacity,
-      });
+      }));
+
+      const { error } = await supabase.from('availability').insert(inserts);
 
       if (error) throw error;
       onSuccess();
@@ -276,26 +317,76 @@ function AddAvailabilityModal({ isOpen, onClose, onSuccess }: AddAvailabilityMod
           </Select>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Start Time</label>
-            <Input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">End Time</label>
-            <Input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              required
-            />
+        <div>
+          <label className="block text-sm font-medium mb-1">Time Slot</label>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { value: 'morning' as SlotPreset, label: 'Morning', desc: '7 – 9 AM' },
+              { value: 'evening' as SlotPreset, label: 'Evening', desc: '6 – 8 PM' },
+              { value: 'custom' as SlotPreset, label: 'Custom', desc: 'Set your own' },
+            ]).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setSlotPreset(option.value)}
+                className={`rounded-lg border-2 p-3 text-center transition-colors ${
+                  slotPreset === option.value
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <div className="font-medium text-sm">{option.label}</div>
+                <div className="text-xs text-muted-foreground">{option.desc}</div>
+              </button>
+            ))}
           </div>
         </div>
+
+        {slotPreset === 'custom' && (
+          <div className="space-y-3">
+            {customSlots.map((slot, index) => (
+              <div key={index} className="flex items-end gap-2">
+                <div className="flex-1">
+                  {index === 0 && (
+                    <label className="block text-sm font-medium mb-1">Start</label>
+                  )}
+                  <Input
+                    type="time"
+                    value={slot.startTime}
+                    onChange={(e) => updateCustomSlot(index, 'startTime', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex-1">
+                  {index === 0 && (
+                    <label className="block text-sm font-medium mb-1">End</label>
+                  )}
+                  <Input
+                    type="time"
+                    value={slot.endTime}
+                    onChange={(e) => updateCustomSlot(index, 'endTime', e.target.value)}
+                    required
+                  />
+                </div>
+                {customSlots.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 text-destructive"
+                    onClick={() => removeCustomSlot(index)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={addCustomSlot}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add another time slot
+            </Button>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium mb-1">Max Capacity per Hour</label>
@@ -303,9 +394,9 @@ function AddAvailabilityModal({ isOpen, onClose, onSuccess }: AddAvailabilityMod
             value={maxCapacity.toString()}
             onChange={(e) => setMaxCapacity(parseInt(e.target.value))}
           >
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {n} {n === 1 ? 'person' : 'people'}
+            {CAPACITY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </Select>
