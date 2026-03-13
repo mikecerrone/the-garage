@@ -186,8 +186,8 @@ test.describe('Quick Add', () => {
     await page.goto('/quick-add');
     await page.getByPlaceholder('Mike or 615-555-1212').fill('Maggie');
     await expect(page.getByLabel('Custom time')).toHaveValue('09:00');
-    await expect(page.getByLabel('Custom time')).toHaveAttribute('step', '900');
-    await page.getByLabel('Custom time').fill('09:30');
+    await expect(page.locator('#quick-add-custom-time option')).toHaveCount(96);
+    await page.getByLabel('Custom time').selectOption('09:30');
     await page.getByLabel('First name').fill('Maggie');
     await page.getByLabel('Phone').fill('(615) 555-0000');
     await page.getByRole('button', { name: 'Save booking' }).click();

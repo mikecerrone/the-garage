@@ -24,6 +24,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 
 interface MemberSearchResult {
@@ -50,7 +51,20 @@ const workoutOptions: Array<{ label: string; value: WorkoutType }> = [
   { label: 'Other', value: 'other' },
 ];
 const DEFAULT_CUSTOM_TIME = '09:00';
-const CUSTOM_TIME_STEP_SECONDS = 15 * 60;
+
+const customTimeOptions = Array.from({ length: 24 * 4 }, (_, index) => {
+  const totalMinutes = index * 15;
+  const hours = Math.floor(totalMinutes / 60)
+    .toString()
+    .padStart(2, '0');
+  const minutes = (totalMinutes % 60).toString().padStart(2, '0');
+  const value = `${hours}:${minutes}`;
+
+  return {
+    label: formatTime(`${value}:00`),
+    value,
+  };
+});
 
 function createRequestKey() {
   if (typeof window !== 'undefined' && typeof window.crypto?.randomUUID === 'function') {
@@ -534,7 +548,7 @@ export default function QuickAddPage() {
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    No suggested times for this day. You can still type a custom time below.
+                    No suggested times for this day. You can still pick a custom time below.
                   </p>
                 )}
 
@@ -549,23 +563,23 @@ export default function QuickAddPage() {
                 <label htmlFor="quick-add-custom-time" className="mb-1 block text-sm font-medium">
                   Custom time
                 </label>
-                <Input
+                <Select
                   id="quick-add-custom-time"
-                  type="time"
                   value={customTime}
-                  step={CUSTOM_TIME_STEP_SECONDS}
-                  onFocus={() => {
-                    setSelectedSlot(null);
-                    setConflictError('');
-                  }}
                   onChange={(event) => {
                     setCustomTime(event.target.value);
                     setSelectedSlot(null);
                     setConflictError('');
                   }}
-                />
+                >
+                  {customTimeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Starts at 9:00 AM and snaps to 15-minute intervals.
+                  Starts at 9:00 AM and only shows 15-minute intervals.
                 </p>
               </div>
             </div>
