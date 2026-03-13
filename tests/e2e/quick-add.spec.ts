@@ -185,6 +185,8 @@ test.describe('Quick Add', () => {
 
     await page.goto('/quick-add');
     await page.getByPlaceholder('Mike or 615-555-1212').fill('Maggie');
+    await expect(page.getByLabel('Custom time')).toHaveValue('09:00');
+    await expect(page.getByLabel('Custom time')).toHaveAttribute('step', '900');
     await page.getByLabel('Custom time').fill('09:30');
     await page.getByLabel('First name').fill('Maggie');
     await page.getByLabel('Phone').fill('(615) 555-0000');
@@ -195,6 +197,73 @@ test.describe('Quick Add', () => {
       firstName: 'Maggie',
       phone: '(615) 555-0000',
       startTime: '09:30',
+    });
+    expect(bookingPayloads[0]).not.toHaveProperty('workoutType');
+  });
+
+  test('lets Bob optionally toggle workout buttons on and off', async ({ page }) => {
+    const bookingPayloads: Array<Record<string, unknown>> = [];
+
+    await page.route('**/api/availability**', async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({ slots: [] }),
+        contentType: 'application/json',
+      });
+    });
+
+    await page.route('**/api/operator/members/search**', async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({ members: [] }),
+        contentType: 'application/json',
+      });
+    });
+
+    await page.route('**/api/operator/bookings', async (route) => {
+      const payload = JSON.parse(route.request().postData() || '{}');
+      bookingPayloads.push(payload);
+
+      await route.fulfill({
+        body: JSON.stringify({
+          member: {
+            id: 'member-4',
+            name: 'Bob',
+            phone: '+16155559999',
+          },
+          result: 'created',
+          session: {
+            attended: false,
+            created_at: '2026-03-12T10:00:00Z',
+            created_via: 'admin',
+            date: today,
+            end_time: '10:00:00',
+            id: 'session-4',
+            member_id: 'member-4',
+            notes: null,
+            start_time: '09:00:00',
+            status: 'booked',
+            workout_type: 'push',
+          },
+        }),
+        contentType: 'application/json',
+      });
+    });
+
+    await page.goto('/quick-add');
+    await page.getByPlaceholder('Mike or 615-555-1212').fill('Bob');
+    await page.getByLabel('First name').fill('Bob');
+    await page.getByLabel('Phone').fill('(615) 555-9999');
+
+    const pushButton = page.getByRole('button', { name: 'Push' });
+    await pushButton.click();
+    await expect(pushButton).toHaveAttribute('aria-pressed', 'true');
+    await pushButton.click();
+    await expect(pushButton).toHaveAttribute('aria-pressed', 'false');
+
+    await page.getByRole('button', { name: 'Legs' }).click();
+    await page.getByRole('button', { name: 'Save booking' }).click();
+
+    expect(bookingPayloads[0]).toMatchObject({
+      workoutType: 'legs',
     });
   });
 
