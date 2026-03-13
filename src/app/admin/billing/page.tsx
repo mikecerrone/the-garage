@@ -30,7 +30,7 @@ interface MemberBilling {
   total: number;
   paid: number;
   unpaid: number;
-  payments: (Payment & { session?: { date: string; start_time: string } })[];
+  payments: (Payment & { session?: { date: string; start_time: string } | null })[];
 }
 
 export default function BillingPage() {
@@ -76,11 +76,16 @@ export default function BillingPage() {
         .select(`
           *,
           session:sessions(date, start_time)
-        `)
-        .gte('created_at', monthStart.toISOString())
-        .lte('created_at', monthEnd.toISOString());
+        `);
 
       if (paymentsError) throw paymentsError;
+
+      const monthPayments = (payments || []).filter(
+        (payment: Payment & { session?: { date: string; start_time: string } | null }) =>
+          payment.session &&
+          payment.session.date >= startDate &&
+          payment.session.date <= endDate
+      );
 
       // Group by member
       const memberMap: Record<string, MemberBilling> = {};
@@ -104,7 +109,7 @@ export default function BillingPage() {
       });
 
       // Add payment data
-      (payments || []).forEach((payment: Payment & { session?: { date: string; start_time: string } }) => {
+      monthPayments.forEach((payment: Payment & { session?: { date: string; start_time: string } | null }) => {
         if (memberMap[payment.member_id]) {
           memberMap[payment.member_id].payments.push(payment);
           if (payment.is_paid) {
@@ -152,16 +157,22 @@ export default function BillingPage() {
   async function markAllPaidForMember(memberId: string) {
     setMarkingAllPaid(memberId);
     try {
+      const paymentIds = billingData
+        .find((memberBilling) => memberBilling.member.id === memberId)
+        ?.payments.filter((payment) => !payment.is_paid)
+        .map((payment) => payment.id) || [];
+
+      if (paymentIds.length === 0) {
+        return;
+      }
+
       const { error } = await supabase
         .from('payments')
         .update({
           is_paid: true,
           paid_at: new Date().toISOString(),
         })
-        .eq('member_id', memberId)
-        .eq('is_paid', false)
-        .gte('created_at', monthStart.toISOString())
-        .lte('created_at', monthEnd.toISOString());
+        .in('id', paymentIds);
 
       if (error) throw error;
       fetchBillingData();

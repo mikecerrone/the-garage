@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
 
     // Find or create member
-    let { data: member } = await supabase
+    const { data: member } = await supabase
       .from('members')
       .select('*')
       .eq('phone', normalizedPhone)

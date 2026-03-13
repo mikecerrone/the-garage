@@ -25,6 +25,14 @@ import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 
+function createRequestKey() {
+  if (typeof window !== 'undefined' && typeof window.crypto?.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+
+  return `admin-booking-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export default function AdminDashboard() {
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -37,6 +45,15 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchSessions();
   }, [selectedDate]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryDate = searchParams.get('date');
+
+    if (queryDate) {
+      setSelectedDate(queryDate);
+    }
+  }, []);
 
   async function fetchSessions() {
     setLoading(true);
@@ -72,15 +89,32 @@ export default function AdminDashboard() {
 
       if (error) throw error;
 
-      // If marking as attended, create a payment record
+      const { data: existingPayments, error: paymentsError } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('session_id', session.id);
+
+      if (paymentsError) throw paymentsError;
+
       if (newAttended) {
-        const sessionRate = parseInt(process.env.NEXT_PUBLIC_SESSION_RATE || '25');
-        await supabase.from('payments').insert({
-          member_id: session.member_id,
-          session_id: session.id,
-          amount: sessionRate,
-          is_paid: false,
-        });
+        if (!existingPayments || existingPayments.length === 0) {
+          const sessionRate = parseInt(process.env.NEXT_PUBLIC_SESSION_RATE || '25');
+          const { error: insertError } = await supabase.from('payments').insert({
+            member_id: session.member_id,
+            session_id: session.id,
+            amount: sessionRate,
+            is_paid: false,
+          });
+
+          if (insertError) throw insertError;
+        }
+      } else if (existingPayments && existingPayments.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('payments')
+          .delete()
+          .eq('session_id', session.id);
+
+        if (deleteError) throw deleteError;
       }
 
       fetchSessions();
@@ -344,6 +378,9 @@ interface AddSessionModalProps {
 
 function AddSessionModal({ isOpen, onClose, date, onSuccess }: AddSessionModalProps) {
   const [members, setMembers] = useState<{ id: string; name: string; phone: string }[]>([]);
+  const [conflictMessage, setConflictMessage] = useState('');
+  const [error, setError] = useState('');
+  const [requestKey, setRequestKey] = useState(createRequestKey);
   const [selectedMember, setSelectedMember] = useState('');
   const [startTime, setStartTime] = useState('09:00');
   const [workoutType, setWorkoutType] = useState<WorkoutType>('push');
@@ -354,6 +391,9 @@ function AddSessionModal({ isOpen, onClose, date, onSuccess }: AddSessionModalPr
 
   useEffect(() => {
     if (isOpen) {
+      setConflictMessage('');
+      setError('');
+      setRequestKey(createRequestKey());
       fetchMembers();
     }
   }, [isOpen]);
@@ -367,35 +407,61 @@ function AddSessionModal({ isOpen, onClose, date, onSuccess }: AddSessionModalPr
     setMembers(data || []);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedMember) return;
+  async function submitBooking(allowConflict = false) {
+    if (!selectedMember) {
+      return;
+    }
 
     setLoading(true);
+    setError('');
     try {
-      const endTime = `${parseInt(startTime.split(':')[0]) + 1}:00:00`;
-
-      const { error } = await supabase.from('sessions').insert({
-        member_id: selectedMember,
-        date,
-        start_time: startTime + ':00',
-        end_time: endTime,
-        workout_type: workoutType,
-        created_via: 'admin',
-        notes: notes || null,
+      const response = await fetch('/api/operator/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          allowConflict,
+          date,
+          memberId: selectedMember,
+          notes,
+          requestKey,
+          source: 'admin_dashboard',
+          startTime,
+          workoutType,
+        }),
       });
 
-      if (error) throw error;
+      const payload = await response.json();
+
+      if (response.status === 409) {
+        setConflictMessage(payload.error || 'That time needs a quick review.');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to add session');
+      }
 
       onSuccess();
       onClose();
+      setConflictMessage('');
+      setError('');
+      setRequestKey(createRequestKey());
       setSelectedMember('');
       setNotes('');
     } catch (error) {
-      console.error('Error adding session:', error);
+      setError(
+        error instanceof Error ? error.message : 'Failed to add session'
+      );
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await submitBooking(false);
   }
 
   return (
@@ -405,7 +471,11 @@ function AddSessionModal({ isOpen, onClose, date, onSuccess }: AddSessionModalPr
           <label className="block text-sm font-medium mb-1">Member</label>
           <Select
             value={selectedMember}
-            onChange={(e) => setSelectedMember(e.target.value)}
+            onChange={(e) => {
+              setSelectedMember(e.target.value);
+              setConflictMessage('');
+              setError('');
+            }}
             required
           >
             <option value="">Select a member</option>
@@ -422,7 +492,11 @@ function AddSessionModal({ isOpen, onClose, date, onSuccess }: AddSessionModalPr
           <Input
             type="time"
             value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
+            onChange={(e) => {
+              setStartTime(e.target.value);
+              setConflictMessage('');
+              setError('');
+            }}
             required
           />
         </div>
@@ -431,7 +505,11 @@ function AddSessionModal({ isOpen, onClose, date, onSuccess }: AddSessionModalPr
           <label className="block text-sm font-medium mb-1">Workout Type</label>
           <Select
             value={workoutType}
-            onChange={(e) => setWorkoutType(e.target.value as WorkoutType)}
+            onChange={(e) => {
+              setWorkoutType(e.target.value as WorkoutType);
+              setConflictMessage('');
+              setError('');
+            }}
           >
             <option value="push">Push (Chest)</option>
             <option value="pull">Pull (Arms)</option>
@@ -444,15 +522,37 @@ function AddSessionModal({ isOpen, onClose, date, onSuccess }: AddSessionModalPr
           <label className="block text-sm font-medium mb-1">Notes (optional)</label>
           <Input
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={(e) => {
+              setNotes(e.target.value);
+              setConflictMessage('');
+              setError('');
+            }}
             placeholder="Any special notes..."
           />
         </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {conflictMessage && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            {conflictMessage}
+          </div>
+        )}
 
         <div className="flex gap-2 justify-end pt-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
+          {conflictMessage && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => submitBooking(true)}
+              disabled={loading || !selectedMember}
+            >
+              {loading ? <Spinner size="sm" /> : 'Force Add Anyway'}
+            </Button>
+          )}
           <Button type="submit" disabled={loading || !selectedMember}>
             {loading ? <Spinner size="sm" /> : 'Add Session'}
           </Button>

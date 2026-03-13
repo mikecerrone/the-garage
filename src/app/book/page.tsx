@@ -335,7 +335,7 @@ export default function BookingPage() {
             {selectedSlot && selectedWorkout && !member && (
               <Card>
                 <CardHeader>
-                  <CardTitle>What's your name?</CardTitle>
+                  <CardTitle>What&apos;s your name?</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Input
@@ -396,7 +396,7 @@ export default function BookingPage() {
               <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
                 <Check className="h-8 w-8 text-green-600" />
               </div>
-              <h2 className="text-xl font-bold mb-2">You're booked!</h2>
+              <h2 className="text-xl font-bold mb-2">You&apos;re booked!</h2>
               <p className="text-muted-foreground mb-6">
                 See you at The Garage
               </p>
@@ -435,7 +435,7 @@ export default function BookingPage() {
       {/* Footer */}
       <footer className="border-t border-border mt-auto">
         <div className="max-w-lg mx-auto px-4 py-4 text-center text-sm text-muted-foreground">
-          <p>The Garage — Bob's Neighborhood Gym</p>
+          <p>The Garage - Bob&apos;s Neighborhood Gym</p>
         </div>
       </footer>
     </div>

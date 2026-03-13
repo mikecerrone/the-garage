@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format, parseISO, addHours, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
-import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
+import { toZonedTime } from 'date-fns-tz';
 import { WorkoutType } from '@/types/database';
 
 export function cn(...inputs: ClassValue[]) {
@@ -90,6 +90,19 @@ export function normalizePhone(phone: string): string {
     return `+${cleaned}`;
   }
   return phone;
+}
+
+export function ensureTimeWithSeconds(time: string): string {
+  if (/^\d{2}:\d{2}$/.test(time)) {
+    return `${time}:00`;
+  }
+
+  return time;
+}
+
+export function addHourToTime(time: string): string {
+  const base = parseISO(`2000-01-01T${ensureTimeWithSeconds(time)}`);
+  return format(addHours(base, 1), 'HH:mm:ss');
 }
 
 // Generate hourly slots from a time range
