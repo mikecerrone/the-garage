@@ -24,7 +24,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 
 interface MemberSearchResult {
@@ -50,6 +49,8 @@ const workoutOptions: Array<{ label: string; value: WorkoutType }> = [
   { label: 'Legs', value: 'legs' },
   { label: 'Other', value: 'other' },
 ];
+const DEFAULT_CUSTOM_TIME = '09:00';
+const CUSTOM_TIME_STEP_SECONDS = 15 * 60;
 
 function createRequestKey() {
   if (typeof window !== 'undefined' && typeof window.crypto?.randomUUID === 'function') {
@@ -76,7 +77,7 @@ export default function QuickAddPage() {
   const [availabilityError, setAvailabilityError] = useState('');
   const [availabilityLoading, setAvailabilityLoading] = useState(true);
   const [conflictError, setConflictError] = useState('');
-  const [customTime, setCustomTime] = useState('');
+  const [customTime, setCustomTime] = useState(DEFAULT_CUSTOM_TIME);
   const [generalError, setGeneralError] = useState('');
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [newMemberFirstName, setNewMemberFirstName] = useState('');
@@ -93,7 +94,7 @@ export default function QuickAddPage() {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [workoutType, setWorkoutType] = useState<WorkoutType>('other');
+  const [workoutType, setWorkoutType] = useState<WorkoutType | null>(null);
 
   const selectedDateSlots = availabilityByDate[selectedDate] || [];
   const showNewMemberForm =
@@ -225,7 +226,7 @@ export default function QuickAddPage() {
 
   function resetForNextBooking() {
     setConflictError('');
-    setCustomTime('');
+    setCustomTime(DEFAULT_CUSTOM_TIME);
     setGeneralError('');
     setNewMemberFirstName('');
     setNewMemberPhone('');
@@ -237,7 +238,7 @@ export default function QuickAddPage() {
     setSearchResults([]);
     setSelectedMember(null);
     setSelectedSlot(null);
-    setWorkoutType('other');
+    setWorkoutType(null);
   }
 
   async function saveBooking(allowConflict = false) {
@@ -265,7 +266,7 @@ export default function QuickAddPage() {
           requestKey,
           source: 'quick_add',
           startTime: selectedSlot?.start_time || customTime,
-          workoutType,
+          workoutType: workoutType || undefined,
         }),
       });
 
@@ -519,7 +520,6 @@ export default function QuickAddPage() {
                           variant={isSelected ? 'default' : 'outline'}
                           className="justify-between"
                           onClick={() => {
-                            setCustomTime('');
                             setSelectedSlot(slot);
                             setConflictError('');
                           }}
@@ -544,7 +544,7 @@ export default function QuickAddPage() {
               </div>
             )}
 
-            <div className="grid gap-4 rounded-xl border border-dashed border-border p-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-dashed border-border p-4">
               <div>
                 <label htmlFor="quick-add-custom-time" className="mb-1 block text-sm font-medium">
                   Custom time
@@ -553,28 +553,51 @@ export default function QuickAddPage() {
                   id="quick-add-custom-time"
                   type="time"
                   value={customTime}
+                  step={CUSTOM_TIME_STEP_SECONDS}
+                  onFocus={() => {
+                    setSelectedSlot(null);
+                    setConflictError('');
+                  }}
                   onChange={(event) => {
                     setCustomTime(event.target.value);
                     setSelectedSlot(null);
                     setConflictError('');
                   }}
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Starts at 9:00 AM and snaps to 15-minute intervals.
+                </p>
               </div>
+            </div>
+
+            <div className="space-y-2">
               <div>
-                <label htmlFor="quick-add-workout" className="mb-1 block text-sm font-medium">
-                  Workout
-                </label>
-                <Select
-                  id="quick-add-workout"
-                  value={workoutType}
-                  onChange={(event) => setWorkoutType(event.target.value as WorkoutType)}
-                >
-                  {workoutOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
+                <label className="mb-1 block text-sm font-medium">Workout</label>
+                <p className="text-xs text-muted-foreground">
+                  Optional. Tap a button to pick one, or tap it again to clear.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Workout">
+                {workoutOptions.map((option) => {
+                  const isSelected = workoutType === option.value;
+
+                  return (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      variant={isSelected ? 'default' : 'outline'}
+                      aria-pressed={isSelected}
+                      className="w-full"
+                      onClick={() => {
+                        setWorkoutType((current) =>
+                          current === option.value ? null : option.value
+                        );
+                      }}
+                    >
                       {option.label}
-                    </option>
-                  ))}
-                </Select>
+                    </Button>
+                  );
+                })}
               </div>
             </div>
 
