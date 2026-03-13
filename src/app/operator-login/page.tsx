@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Mail, Shield } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { getPublicAppUrl } from '@/lib/public-url';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -35,7 +36,12 @@ export default function OperatorLoginPage() {
 
     try {
       const supabase = createClient();
-      const redirectUrl = new URL('/auth/callback', window.location.origin);
+      const publicAppUrl = getPublicAppUrl();
+      if (!publicAppUrl) {
+        throw new Error('The app URL is not configured. Try again in a moment.');
+      }
+
+      const redirectUrl = new URL('/auth/callback', `${publicAppUrl}/`);
       redirectUrl.searchParams.set('next', nextPath);
 
       const { error: signInError } = await supabase.auth.signInWithOtp({
