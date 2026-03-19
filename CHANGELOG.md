@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1.1] - 2026-03-13
+
+### Added
+
+- Added `TWILIO_MESSAGING_SERVICE_SID` env var support to route outbound SMS through the A2P-registered messaging service for 10DLC compliance.
+
+### Changed
+
+- Changed `sendSMS` to prefer `messagingServiceSid` over `from` phone number when the env var is set, with fallback to direct phone number sending.
+
 ## [0.1.1.0] - 2026-03-12
 
 ### Added

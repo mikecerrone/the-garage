@@ -29,6 +29,7 @@ type BookingStep = 'phone' | 'select' | 'confirm' | 'success';
 export default function BookingPage() {
   const [step, setStep] = useState<BookingStep>('phone');
   const [phone, setPhone] = useState('');
+  const [smsConsent, setSmsConsent] = useState(false);
   const [name, setName] = useState('');
   const [member, setMember] = useState<Member | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -172,11 +173,36 @@ export default function BookingPage() {
                   </p>
                 </div>
 
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={smsConsent}
+                    onChange={(e) => setSmsConsent(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                    required
+                  />
+                  <span className="text-xs text-muted-foreground leading-relaxed">
+                    By checking this box and submitting your phone number, you agree to receive
+                    recurring automated SMS messages from The Garage related to gym session bookings,
+                    reminders, waitlist updates, and community announcements. Message frequency varies.
+                    Message and data rates may apply. Reply STOP to opt out at any time. Reply HELP
+                    for help. Consent is not a condition of membership or purchase. View our{' '}
+                    <a href="https://www.firstturn.xyz/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                      Privacy Policy
+                    </a>{' '}
+                    and{' '}
+                    <a href="https://www.firstturn.xyz/terms-and-conditions" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                      SMS Terms
+                    </a>
+                    .
+                  </span>
+                </label>
+
                 {error && (
                   <p className="text-sm text-destructive">{error}</p>
                 )}
 
-                <Button type="submit" className="w-full" disabled={loading || !phone}>
+                <Button type="submit" className="w-full" disabled={loading || !phone || !smsConsent}>
                   {loading ? <Spinner size="sm" /> : (
                     <>
                       Continue

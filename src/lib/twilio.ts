@@ -3,6 +3,7 @@ import twilio from 'twilio';
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
 
 let client: twilio.Twilio | null = null;
 
@@ -24,7 +25,7 @@ export async function sendSMS(to: string, body: string): Promise<boolean> {
   try {
     await twilioClient.messages.create({
       body,
-      from: twilioPhone,
+      ...(messagingServiceSid ? { messagingServiceSid } : { from: twilioPhone }),
       to,
     });
     return true;
